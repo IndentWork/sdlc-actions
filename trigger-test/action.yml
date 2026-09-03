@@ -14,12 +14,8 @@ runs:
       shell: bash
       run: |
         # Read API URL from central platform.yml — one place to update when URLs change.
-        API_URL=$(python3 -c "
-import yaml
-with open('${{ github.action_path }}/../config/platform.yml') as f:
-    config = yaml.safe_load(f)
-print(config['${{ inputs.env }}']['api_url'])
-")
+        # Python one-liner avoids indentation issues inside YAML block scalar.
+        API_URL=$(python3 -c "import yaml; c=yaml.safe_load(open('${{ github.action_path }}/../config/platform.yml')); print(c['${{ inputs.env }}']['api_url'])")
         echo "API_URL=$API_URL" >> $GITHUB_ENV
         echo "Using API: $API_URL"
 
