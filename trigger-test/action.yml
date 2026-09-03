@@ -1,24 +1,34 @@
 name: "SDLC Trigger Test"
-description: "Calls the SDLC control plane test endpoint to validate Service Bus → Storage end-to-end flow."
+description: "Validates the end-to-end flow — Service Bus → Worker → Storage. Uses GitHub OIDC to identify the tenant."
 
 inputs:
   api-url:
-    description: "SDLC Control Plane API URL (e.g. https://ca-sdlc-base-dev.xxx.centralindia.azurecontainerapps.io)"
-    required: true
-  tenant-id:
-    description: "Tenant UUID from the SDLC control plane"
+    description: "SDLC Control Plane API URL"
     required: true
 
 runs:
   using: "composite"
   steps:
-    - name: Trigger test storage endpoint
+    - name: Get OIDC token and trigger test
       shell: bash
       run: |
-        echo "Calling test_storage endpoint for tenant ${{ inputs.tenant-id }}"
+        # Request a short-lived OIDC token from GitHub.
+        # The token contains repository_owner (org name) which the API uses to identify the tenant.
+        TOKEN=$(curl -sf \
+          -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sdlc-control-plane" \
+          | jq -r '.value')
+
+        if [ -z "$TOKEN" ]; then
+          echo "Failed to get OIDC token"
+          exit 1
+        fi
+
+        echo "OIDC token obtained — calling test_storage endpoint"
 
         RESPONSE=$(curl -s -w "\n%{http_code}" \
-          "${{ inputs.api-url }}/tenant/${{ inputs.tenant-id }}/test_storage")
+          "${{ inputs.api-url }}/tenant/test_storage" \
+          -H "Authorization: Bearer $TOKEN")
 
         HTTP_CODE=$(echo "$RESPONSE" | tail -1)
         BODY=$(echo "$RESPONSE" | head -1)
@@ -31,4 +41,4 @@ runs:
           exit 1
         fi
 
-        echo "Test triggered successfully — check Storage for hello.txt"
+        echo "Test triggered successfully — worker will create hello.txt in Storage"
