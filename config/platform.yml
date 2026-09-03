@@ -1,0 +1,8 @@
+# SDLC Platform configuration — read by all sdlc-actions at runtime.
+# Update this file when URLs change — all actions pick it up automatically.
+
+dev:
+  api_url: "https://ca-sdlc-base-dev.bluerock-3fcfcdd5.centralindia.azurecontainerapps.io"
+
+prod:
+  api_url: "https://ca-sdlc-base-prod.placeholder.azurecontainerapps.io"
