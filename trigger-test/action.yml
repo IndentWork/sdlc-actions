@@ -1,0 +1,34 @@
+name: "SDLC Trigger Test"
+description: "Calls the SDLC control plane test endpoint to validate Service Bus → Storage end-to-end flow."
+
+inputs:
+  api-url:
+    description: "SDLC Control Plane API URL (e.g. https://ca-sdlc-base-dev.xxx.centralindia.azurecontainerapps.io)"
+    required: true
+  tenant-id:
+    description: "Tenant UUID from the SDLC control plane"
+    required: true
+
+runs:
+  using: "composite"
+  steps:
+    - name: Trigger test storage endpoint
+      shell: bash
+      run: |
+        echo "Calling test_storage endpoint for tenant ${{ inputs.tenant-id }}"
+
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          "${{ inputs.api-url }}/tenant/${{ inputs.tenant-id }}/test_storage")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+        BODY=$(echo "$RESPONSE" | head -1)
+
+        echo "Response: $BODY"
+        echo "HTTP status: $HTTP_CODE"
+
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Error: expected HTTP 200, got $HTTP_CODE"
+          exit 1
+        fi
+
+        echo "Test triggered successfully — check Storage for hello.txt"
