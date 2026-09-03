@@ -9,7 +9,7 @@ inputs:
   config-path:
     description: "Path to sdlc.yml relative to repo root"
     required: false
-    default: "sdlc-config/sdlc.yml"
+    default: "sdlc.yml"
 
 runs:
   using: "composite"
