@@ -1,0 +1,54 @@
+name: "SDLC Trigger Indexing"
+description: "Triggers the SDLC indexing worker to index all repos defined in sdlc.yml."
+
+inputs:
+  env:
+    description: "Environment to target (dev or prod)"
+    required: false
+    default: "dev"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Read platform config
+      shell: bash
+      run: |
+        API_URL=$(python3 -c "import yaml; c=yaml.safe_load(open('${{ github.action_path }}/../config/platform.yml')); print(c['${{ inputs.env }}']['api_url'])")
+        echo "API_URL=$API_URL" >> $GITHUB_ENV
+        echo "Using API: $API_URL"
+
+    - name: Get OIDC token
+      shell: bash
+      run: |
+        TOKEN=$(curl -sf \
+          -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sdlc-control-plane" \
+          | jq -r '.value')
+
+        if [ -z "$TOKEN" ]; then
+          echo "Failed to get OIDC token"
+          exit 1
+        fi
+
+        echo "TOKEN=$TOKEN" >> $GITHUB_ENV
+        echo "OIDC token obtained"
+
+    - name: Trigger indexing
+      shell: bash
+      run: |
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X POST "${{ env.API_URL }}/tenant/index" \
+          -H "Authorization: Bearer ${{ env.TOKEN }}")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+        BODY=$(echo "$RESPONSE" | head -1)
+
+        echo "Response: $BODY"
+        echo "HTTP status: $HTTP_CODE"
+
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Error: expected HTTP 200, got $HTTP_CODE"
+          exit 1
+        fi
+
+        echo "Indexing triggered — worker will index all repos from sdlc.yml"
