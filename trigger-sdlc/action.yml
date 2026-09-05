@@ -1,0 +1,66 @@
+name: "SDLC Trigger Agent"
+description: "Triggers the SDLC orchestrator when sdlc label is assigned to an issue."
+
+inputs:
+  issue_number:
+    description: "Issue number to process"
+    required: true
+  issue_repo:
+    description: "Issue repo name (e.g. ecommerce-issues)"
+    required: true
+  env:
+    description: "Environment to target (dev or prod)"
+    required: false
+    default: "dev"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Read platform config
+      shell: bash
+      run: |
+        API_URL=$(python3 -c "import yaml; c=yaml.safe_load(open('${{ github.action_path }}/../config/platform.yml')); print(c['${{ inputs.env }}']['api_url'])")
+        echo "API_URL=$API_URL" >> $GITHUB_ENV
+        echo "Using API: $API_URL"
+
+    - name: Get OIDC token
+      shell: bash
+      run: |
+        TOKEN=$(curl -sf \
+          -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" \
+          "${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=sdlc-control-plane" \
+          | python3 -c "import sys,json; print(json.load(sys.stdin)['value'])")
+
+        if [ -z "$TOKEN" ]; then
+          echo "Failed to get OIDC token"
+          exit 1
+        fi
+
+        echo "TOKEN=$TOKEN" >> $GITHUB_ENV
+        echo "OIDC token obtained"
+
+    - name: Trigger SDLC orchestrator
+      shell: bash
+      run: |
+        RESPONSE=$(curl -s -w "\n%{http_code}" \
+          -X POST "${{ env.API_URL }}/tenant/orchestrate" \
+          -H "Authorization: Bearer ${{ env.TOKEN }}" \
+          -H "Content-Type: application/json" \
+          -d "{
+            \"github_org\":   \"${{ github.repository_owner }}\",
+            \"issue_repo\":   \"${{ inputs.issue_repo }}\",
+            \"issue_number\": ${{ inputs.issue_number }}
+          }")
+
+        HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+        BODY=$(echo "$RESPONSE" | head -1)
+
+        echo "Response: $BODY"
+        echo "HTTP status: $HTTP_CODE"
+
+        if [ "$HTTP_CODE" != "200" ]; then
+          echo "Error: expected HTTP 200, got $HTTP_CODE"
+          exit 1
+        fi
+
+        echo "Orchestrator triggered — agent will process issue #${{ inputs.issue_number }}"
